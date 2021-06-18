@@ -22,7 +22,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  video_compress:
+  csl_video_process:
     path: ../
 
 # For information on the generic Dart part of this file, see the

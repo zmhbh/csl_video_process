@@ -1,4 +1,4 @@
-library video_compress;
+library csl_video_process;
 
 export 'src/video_compress/video_compressor.dart';
 export 'src/video_compress/video_quality.dart';

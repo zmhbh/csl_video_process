@@ -1,6 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:video_compress/video_compress.dart';
+import 'package:csl_video_process/csl_video_process.dart';
 import 'package:file_selector/file_selector.dart';
 import 'dart:io';
 

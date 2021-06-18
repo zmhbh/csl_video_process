@@ -1,4 +1,4 @@
-package com.example.video_compress
+package com.chanshila.video_process
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -128,7 +128,7 @@ class Utility(private val channelName: String) {
     }
 
     fun deleteAllCache(context: Context, result: MethodChannel.Result) {
-        val dir = context.getExternalFilesDir("video_compress")
+        val dir = context.getExternalFilesDir("csl_video_process")
         result.success(dir?.deleteRecursively())
     }
 }

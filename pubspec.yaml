@@ -1,6 +1,6 @@
-name: video_compress
+name: csl_video_process
 description: Light library of video manipulation of Flutter. Compress video, remove audio, get video thumbnail from dart code.
-version: 3.0.0
+version: 1.0.0
 homepage: https://github.com/jonataslaw/VideoCompress
 
 environment:
@@ -22,12 +22,10 @@ flutter:
   plugin:
     platforms:
       android:
-        package: com.example.video_compress
-        pluginClass: VideoCompressPlugin
+        package: com.chanshila.video_process
+        pluginClass: VideoProcessPlugin
       ios:
-        pluginClass: VideoCompressPlugin
-      macos:
-        pluginClass: VideoCompressPlugin
+        pluginClass: CslVideoProcessPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

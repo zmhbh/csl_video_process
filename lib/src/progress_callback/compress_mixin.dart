@@ -4,7 +4,7 @@ import 'subscription.dart';
 
 class CompressMixin {
   final compressProgress$ = ObservableBuilder<double>();
-  final _channel = const MethodChannel('video_compress');
+  final _channel = const MethodChannel('csl_video_process');
 
   @protected
   void initProcessCallback() {

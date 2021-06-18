@@ -1,4 +1,4 @@
-package com.example.video_compress
+package com.chanshila.video_process
 
 import android.content.Context
 import android.net.Uri
@@ -11,7 +11,6 @@ import com.otaliastudios.transcoder.strategy.DefaultAudioStrategy
 import com.otaliastudios.transcoder.strategy.DefaultVideoStrategy
 import com.otaliastudios.transcoder.strategy.RemoveTrackStrategy
 import com.otaliastudios.transcoder.strategy.TrackStrategy
-import com.otaliastudios.transcoder.strategy.size.*
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.BinaryMessenger
 import com.otaliastudios.transcoder.internal.Logger
@@ -25,24 +24,24 @@ import java.util.*
 import java.util.concurrent.Future
 
 /**
- * VideoCompressPlugin
+ * VideoProcessPlugin
  */
-class VideoCompressPlugin : MethodCallHandler, FlutterPlugin {
+class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
 
 
     private var _context: Context? = null
     private var _channel: MethodChannel? = null
-    private val TAG = "VideoCompressPlugin"
+    private val TAG = "VideoProcessPlugin"
     private val LOG = Logger(TAG)
     private var transcodeFuture:Future<Void>? = null
-    var channelName = "video_compress"
+    var channelName = "csl_video_process"
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         val context = _context;
         val channel = _channel;
 
         if (context == null || channel == null) {
-            Log.w(TAG, "Calling VideoCompress plugin before initialization")
+            Log.w(TAG, "Calling VideoProcess plugin before initialization")
             return
         }
 
@@ -186,11 +185,11 @@ class VideoCompressPlugin : MethodCallHandler, FlutterPlugin {
     }
 
     companion object {
-        private const val TAG = "video_compress"
+        private const val TAG = "csl_video_process"
 
         @JvmStatic
         fun registerWith(registrar: Registrar) {
-            val instance = VideoCompressPlugin()
+            val instance = VideoProcessPlugin()
             instance.init(registrar.context(), registrar.messenger())
         }
     }
