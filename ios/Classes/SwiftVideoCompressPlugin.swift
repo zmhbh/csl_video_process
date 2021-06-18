@@ -42,7 +42,7 @@ public class SwiftVideoCompressPlugin: NSObject, FlutterPlugin {
             let duration = args!["duration"] as? Double
             let includeAudio = args!["includeAudio"] as? Bool
             let frameRate = args!["frameRate"] as? Int
-            compressVideo(path, quality, deleteOrigin, startTime, duration, includeAudio,
+            compressVideoV2(path, quality, deleteOrigin, startTime, duration, includeAudio,
                           frameRate, result)
         case "cancelCompression":
             cancelCompression(result)
@@ -147,7 +147,7 @@ public class SwiftVideoCompressPlugin: NSObject, FlutterPlugin {
         case 2:
             return AVAssetExportPresetMediumQuality
         case 3:
-            return AVAssetExportPresetHighestQuality
+            return AVAssetExportPreset1280x720
         default:
             return AVAssetExportPresetMediumQuality
         }
@@ -194,9 +194,10 @@ public class SwiftVideoCompressPlugin: NSObject, FlutterPlugin {
         let session = getComposition(isIncludeAudio, timeRange, sourceVideoTrack!)
         
         let exporter = AVAssetExportSession(asset: session, presetName: getExportPreset(quality))!
+        _ = try? FileManager.default.removeItem(at: compressionUrl)
         
         exporter.outputURL = compressionUrl
-        exporter.outputFileType = AVFileType.mp4
+        exporter.outputFileType = AVFileType.mov
         exporter.shouldOptimizeForNetworkUse = true
         
         if frameRate != nil {
@@ -205,9 +206,9 @@ public class SwiftVideoCompressPlugin: NSObject, FlutterPlugin {
             exporter.videoComposition = videoComposition
         }
         
-        if !isIncludeAudio {
+        //if !isIncludeAudio {
             exporter.timeRange = timeRange
-        }
+        //}
         
         Utility.deleteFile(compressionUrl.absoluteString)
         
@@ -244,10 +245,234 @@ public class SwiftVideoCompressPlugin: NSObject, FlutterPlugin {
         })
     }
     
+    private func compressVideoV2(_ path: String,_ quality: NSNumber,_ deleteOrigin: Bool,_ startTime: Double?,
+                               _ duration: Double?,_ includeAudio: Bool?,_ frameRate: Int?,
+                               _ result: @escaping FlutterResult) {
+        //video file to make the asset
+        var assetWriter:AVAssetWriter?
+        var assetReader:AVAssetReader?
+        let bitrate:NSNumber = NSNumber(value:1024 * 1024 * 2.0)
+        
+        var audioFinished = false
+        var videoFinished = false
+        
+        let sourceVideoUrl = Utility.getPathUrl(path)
+        
+        print("sourceVideoUrl: ", sourceVideoUrl)
+        
+        let sourceVideoType = "mp4"
+        
+        let asset = AVAsset(url: sourceVideoUrl)
+        
+        let timescale = asset.duration.timescale
+        let cmStartTime = CMTimeMakeWithSeconds(5, preferredTimescale: timescale)
+        let cmEndTime = CMTimeMakeWithSeconds(15, preferredTimescale: timescale)
+
+
+        //create asset reader
+        do{
+            assetReader = try AVAssetReader(asset: asset)
+        } catch{
+            assetReader = nil
+        }
+        
+        guard let reader = assetReader else{
+               fatalError("Could not initalize asset reader probably failed its try catch")
+           }
+        
+        //reader.timeRange = CMTimeRangeFromTimeToTime(start: cmStartTime, end: cmEndTime)
+        
+        let videoTrack = asset.tracks(withMediaType: AVMediaType.video).first!
+        let audioTrack = asset.tracks(withMediaType: AVMediaType.audio).first!
+        
+        let videoReaderSettings: [String:Any] =  [kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32ARGB ]
+
+        let compressionUrl =
+            Utility.getPathUrl("\(Utility.basePath())/\(Utility.getFileName(path)).\(sourceVideoType)")
+        
+        print("compressionUrl: ", compressionUrl)
+        _ = try? FileManager.default.removeItem(at: compressionUrl)
+
+        
+        // ADJUST BIT RATE OF VIDEO HERE
+                
+        // Video Output Configuration
+        let videoCompressionProps: Dictionary<String, Any> = [
+            AVVideoAverageBitRateKey : bitrate,
+            AVVideoMaxKeyFrameIntervalKey : 15,
+            AVVideoProfileLevelKey : AVVideoProfileLevelH264High41
+        ]
+        
+        
+        //resize
+        // Rect to fit that size within. In this case you don't care about fitting
+        // inside a rect, so pass (0, 0) for the origin.
+        
+        let frameRate = videoTrack.nominalFrameRate
+        let bitRate = videoTrack.estimatedDataRate
+        
+        print("videoTrack.naturalSize: ",videoTrack.naturalSize)
+        print("frameRate: ",frameRate)
+        print("bitRate: ",bitRate)
+        
+        let transform = videoTrack.preferredTransform
+        func radiansToDegrees(_ radians: Float) -> CGFloat {
+                    return CGFloat(radians * 180.0 / Float.pi)
+                }
+        let videoAngleInDegree = Int(radiansToDegrees(atan2f(Float(transform.b), Float(transform.a))))
+        print("videoAngleInDegree: ", videoAngleInDegree)
+        
+        var constraint = CGRect(x: 0, y: 0, width: 720, height: 1080)
+        if (abs(videoAngleInDegree) == 90){
+            constraint = CGRect(x: 0, y: 0, width: 1080, height: 720)
+        }
+        let compressedSize = AVMakeRect(aspectRatio: videoTrack.naturalSize, insideRect: constraint).size
+        
+        let videoSettings:[String:Any] = [
+            AVVideoCompressionPropertiesKey: videoCompressionProps,
+            AVVideoCodecKey: AVVideoCodecH264,
+            AVVideoHeightKey: compressedSize.height,
+            AVVideoWidthKey: compressedSize.width
+        ]
+        
+        // Audio Output Configuration
+        var acl = AudioChannelLayout()
+        acl.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+        acl.mChannelBitmap = AudioChannelBitmap(rawValue: UInt32(0))
+        acl.mNumberChannelDescriptions = UInt32(0)
+        
+        let acll = MemoryLayout<AudioChannelLayout>.size
+        
+        let audioOutputSettings: Dictionary<String, Any> = [
+            AVFormatIDKey : UInt(kAudioFormatMPEG4AAC),
+            AVNumberOfChannelsKey : UInt(2),
+            AVSampleRateKey: 44100,
+            AVEncoderBitRateKey : 128000,
+            AVChannelLayoutKey : NSData(bytes:&acl, length: acll)
+        ]
+ 
+        // Audio Input Configuration
+        let decompressionAudioSettings: Dictionary<String, Any> = [
+            AVFormatIDKey: UInt(kAudioFormatLinearPCM)
+        ]
+        
+        let assetReaderVideoOutput = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: videoReaderSettings)
+        let assetReaderAudioOutput = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: decompressionAudioSettings)
+        assetReaderVideoOutput.alwaysCopiesSampleData = false
+        
+        if reader.canAdd(assetReaderVideoOutput){
+            reader.add(assetReaderVideoOutput)
+        }else{
+            fatalError("Couldn't add video output reader")
+        }
+        
+        if reader.canAdd(assetReaderAudioOutput){
+            reader.add(assetReaderAudioOutput)
+        }else{
+            fatalError("Couldn't add audio output reader")
+        }
+                
+        let audioInput = AVAssetWriterInput(mediaType: AVMediaType.audio, outputSettings: audioOutputSettings)
+        let videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: videoSettings)
+        videoInput.transform = videoTrack.preferredTransform
+        //we need to add samples to the video input
+        
+        let videoInputQueue = DispatchQueue(label: "videoQueue")
+        let audioInputQueue = DispatchQueue(label: "audioQueue")
+        
+        do{
+            assetWriter = try AVAssetWriter(outputURL: compressionUrl, fileType: AVFileType.mp4)
+        }catch{
+            assetWriter = nil
+        }
+        guard let writer = assetWriter else{
+            fatalError("assetWriter was nil")
+        }
+        
+        writer.shouldOptimizeForNetworkUse = true
+        writer.add(videoInput)
+        writer.add(audioInput)
+        
+        
+        writer.startWriting()
+        reader.startReading()
+        writer.startSession(atSourceTime: CMTime.zero)
+        
+        let closeWriter:()->Void = {
+                    if (audioFinished && videoFinished){
+                        assetWriter?.finishWriting(completionHandler: {
+                            
+                            self.checkFileSize(sizeUrl: (assetWriter?.outputURL)!, message: "The file size of the compressed file is: ")
+                            
+                            var json = self.getMediaInfoJson(compressionUrl.absoluteString)
+                            json["isCancel"] = false
+                            let jsonString = Utility.keyValueToJson(json)
+                            result(jsonString)
+                            
+                            //completion((self.assetWriter?.outputURL)!)
+                            
+                        })
+                        
+                        assetReader?.cancelReading()
+         
+                    }
+                }
+         
+        let duration = asset.duration
+        let durationTime = CMTimeGetSeconds(duration)
+                
+                audioInput.requestMediaDataWhenReady(on: audioInputQueue) {
+                    while(audioInput.isReadyForMoreMediaData){
+                        let sample = assetReaderAudioOutput.copyNextSampleBuffer()
+                        if (sample != nil){
+                            audioInput.append(sample!)
+                        }else{
+                            audioInput.markAsFinished()
+                            DispatchQueue.main.async {
+                                audioFinished = true
+                                closeWriter()
+                            }
+                            break;
+                        }
+                    }
+                }
+        
+
+                
+                videoInput.requestMediaDataWhenReady(on: videoInputQueue) {
+                    //request data here
+                    
+                    while(videoInput.isReadyForMoreMediaData){
+                        let sample = assetReaderVideoOutput.copyNextSampleBuffer()
+                        if (sample != nil){
+                            videoInput.append(sample!)
+                            let timeStamp = CMSampleBufferGetPresentationTimeStamp(sample!)
+                            let timeSecond = CMTimeGetSeconds(timeStamp)
+                            let per = timeSecond / durationTime
+                            print("video progress --- \(per)")
+                        }else{
+                            videoInput.markAsFinished()
+                            DispatchQueue.main.async {
+                                videoFinished = true
+                                closeWriter()
+                            }
+                            break;
+                        }
+                    }
+         
+                }
+    }
+    
     private func cancelCompression(_ result: FlutterResult) {
         exporter?.cancelExport()
         stopCommand = true
         result("")
+    }
+    
+    
+    func checkFileSize(sizeUrl: URL, message:String){
+        let data = NSData(contentsOf: sizeUrl)!
+        print(message, (Double(data.length) / 1048576.0), " mb")
     }
     
 }

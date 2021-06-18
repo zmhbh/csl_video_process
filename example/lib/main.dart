@@ -1,5 +1,5 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:file_selector/file_selector.dart';
 import 'dart:io';
@@ -41,9 +41,18 @@ class _MyHomePageState extends State<MyHomePage> {
       final typeGroup = XTypeGroup(label: 'videos', extensions: ['mov', 'mp4']);
       file = await openFile(acceptedTypeGroups: [typeGroup]);
     } else {
-      final picker = ImagePicker();
-      PickedFile? pickedFile = await picker.getVideo(source: ImageSource.gallery);
-      file = File(pickedFile!.path);
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        allowCompression: false,
+      );
+
+      if (result == null) {
+        return;
+      }
+      print('pickedImage path: ${result.files.single.path}');
+      print('pickedImage size: ${result.files.single.size}');
+
+      file = File(result.files.single.path!);
     }
     if (file == null) {
       return;
@@ -51,7 +60,9 @@ class _MyHomePageState extends State<MyHomePage> {
     await VideoCompress.setLogLevel(0);
     final MediaInfo? info = await VideoCompress.compressVideo(
       file.path,
-      quality: VideoQuality.MediumQuality,
+      quality: VideoQuality.HighestQuality,
+      // startTime: 0,
+      // duration: 10,
       deleteOrigin: false,
       includeAudio: true,
     );

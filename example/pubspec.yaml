@@ -16,6 +16,7 @@ dependencies:
   video_player: ^2.1.1
   file_selector: ^0.8.2
   file_selector_macos: ^0.0.4
+  file_picker: ^3.0.2+2
   
 dev_dependencies:
   flutter_test:
