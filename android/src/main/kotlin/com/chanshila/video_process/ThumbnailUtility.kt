@@ -11,7 +11,8 @@ class ThumbnailUtility(channelName: String) {
     private val utility = Utility(channelName)
 
     fun getByteThumbnail(path: String, quality: Int, position: Long, result: MethodChannel.Result) {
-        val bmp = utility.getBitmap(path, position, result)
+        var timeUs = position * 1000
+        val bmp = utility.getBitmap(path, timeUs, result)
 
         val stream = ByteArrayOutputStream()
         bmp.compress(Bitmap.CompressFormat.JPEG, quality, stream)
@@ -22,7 +23,8 @@ class ThumbnailUtility(channelName: String) {
 
     fun getFileThumbnail(context: Context, path: String, quality: Int, position: Long,
                              result: MethodChannel.Result) {
-        val bmp = utility.getBitmap(path, position, result)
+        var timeUs = position * 1000
+        val bmp = utility.getBitmap(path, timeUs, result)
 
         val dir = context.getExternalFilesDir("csl_video_process")
 

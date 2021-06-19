@@ -65,8 +65,8 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         assetImgGenerate.appliesPreferredTrackTransform = true
         
         let timeScale = CMTimeScale(track.nominalFrameRate)
-        let time = CMTimeMakeWithSeconds(Float64(truncating: position),preferredTimescale: timeScale)
-        guard let img = try? assetImgGenerate.copyCGImage(at:time, actualTime: nil) else {
+        let timeMs = CMTimeMakeWithSeconds(Float64(truncating: position) * 0.001, preferredTimescale: timeScale * 1000)
+        guard let img = try? assetImgGenerate.copyCGImage(at:timeMs, actualTime: nil) else {
             return nil
         }
         let thumbnail = UIImage(cgImage: img)

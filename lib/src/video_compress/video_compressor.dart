@@ -37,7 +37,9 @@ extension Compress on IVideoCompress {
   Future<T?> _invoke<T>(String name, [Map<String, dynamic>? params]) async {
     T? result;
     try {
-      result = params != null ? await channel.invokeMethod(name, params) : await channel.invokeMethod(name);
+      result = params != null
+          ? await channel.invokeMethod(name, params)
+          : await channel.invokeMethod(name);
     } on PlatformException catch (e) {
       debugPrint('''Error from VideoCompress: 
       Method: $name
@@ -151,6 +153,25 @@ extension Compress on IVideoCompress {
 
     // ignore: invalid_use_of_protected_member
     setProcessingStatus(false);
+
+    if (jsonStr != null) {
+      final jsonMap = json.decode(jsonStr);
+      return MediaInfo.fromJson(jsonMap);
+    } else {
+      return null;
+    }
+  }
+
+  Future<MediaInfo?> trimVideo(
+    String videoPath, {
+    required int startTimeMs,
+    required int endTimeMs,
+  }) async {
+    final jsonStr = await _invoke<String>('trimVideo', {
+      'path': videoPath,
+      'startTimeMs': startTimeMs,
+      'endTimeMs': endTimeMs,
+    });
 
     if (jsonStr != null) {
       final jsonMap = json.decode(jsonStr);
