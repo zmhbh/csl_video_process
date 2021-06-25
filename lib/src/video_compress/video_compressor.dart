@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import '../progress_callback/compress_mixin.dart';
-import '../video_compress/video_quality.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../media/media_info.dart';
@@ -70,6 +69,7 @@ extension Compress on IVideoCompress {
   /// select the position unit in the video by [position] is seconds
   Future<File> getFileThumbnail(
     String path, {
+    required int sessionId,
     int quality = 100,
     int position = -1,
   }) async {
@@ -79,6 +79,7 @@ extension Compress on IVideoCompress {
     // lead to the failure of compression
     final filePath = await (_invoke<String>('getFileThumbnail', {
       'path': path,
+      'sessionId': sessionId,
       'quality': quality,
       'position': position,
     }));
@@ -108,26 +109,22 @@ extension Compress on IVideoCompress {
   /// compress video from [path]
   /// compress video from [path] return [Future<MediaInfo>]
   ///
-  /// you can choose its quality by [quality],
-  /// determine whether to delete his source file by [deleteOrigin]
-  /// optional parameters [startTime] [duration] [includeAudio] [frameRate]
+  /// [rotation] is clockwise, 0,90,180,270
   ///
   /// ## example
   /// ```dart
   /// final info = await _flutterVideoCompress.compressVideo(
   ///   file.path,
-  ///   deleteOrigin: true,
   /// );
   /// debugPrint(info.toJson());
   /// ```
   Future<MediaInfo?> compressVideo(
     String path, {
-    VideoQuality quality = VideoQuality.DefaultQuality,
-    bool deleteOrigin = false,
-    int? startTime,
-    int? duration,
-    bool? includeAudio,
-    int frameRate = 30,
+    required int sessionId,
+    double? startTimeMs,
+    double? endTimeMs,
+    bool? includeAudio = true,
+    int? rotation,
   }) async {
     if (isCompressing) {
       throw StateError('''VideoCompress Error: 
@@ -143,35 +140,15 @@ extension Compress on IVideoCompress {
     setProcessingStatus(true);
     final jsonStr = await _invoke<String>('compressVideo', {
       'path': path,
-      'quality': quality.index,
-      'deleteOrigin': deleteOrigin,
-      'startTime': startTime,
-      'duration': duration,
+      'sessionId': sessionId,
+      'startTimeMs': startTimeMs,
+      'endTimeMs': endTimeMs,
       'includeAudio': includeAudio,
-      'frameRate': frameRate,
+      'rotation': rotation,
     });
 
     // ignore: invalid_use_of_protected_member
     setProcessingStatus(false);
-
-    if (jsonStr != null) {
-      final jsonMap = json.decode(jsonStr);
-      return MediaInfo.fromJson(jsonMap);
-    } else {
-      return null;
-    }
-  }
-
-  Future<MediaInfo?> trimVideo(
-    String videoPath, {
-    required int startTimeMs,
-    required int endTimeMs,
-  }) async {
-    final jsonStr = await _invoke<String>('trimVideo', {
-      'path': videoPath,
-      'startTimeMs': startTimeMs,
-      'endTimeMs': endTimeMs,
-    });
 
     if (jsonStr != null) {
       final jsonMap = json.decode(jsonStr);
@@ -189,8 +166,12 @@ extension Compress on IVideoCompress {
 
   /// delete the cache folder, please do not put other things
   /// in the folder of this plugin, it will be cleared
-  Future<bool?> deleteAllCache() async {
-    return await _invoke<bool>('deleteAllCache');
+  Future<bool?> deleteSessionCache({
+    required int sessionId,
+  }) async {
+    return await _invoke<bool>('deleteSessionCache', {
+      'sessionId': sessionId,
+    });
   }
 
   Future<void> setLogLevel(int logLevel) async {

@@ -2,8 +2,8 @@
 class Utility: NSObject {
     static let fileManager = FileManager.default
     
-    static func basePath()->String {
-        let path = "\(NSTemporaryDirectory())csl_video_process"
+    static func basePath(_ sessionId: Int)->String {
+        let path = "\(NSTemporaryDirectory())csl_video_process/"+String(sessionId)
         do {
             if !fileManager.fileExists(atPath: path) {
                 try! fileManager.createDirectory(atPath: path,
@@ -23,7 +23,9 @@ class Utility: NSObject {
         }
     }
     static func getFileName(_ path: String)->String {
-        return stripFileExtension((path as NSString).lastPathComponent)
+        let timestamp = Int64(NSDate().timeIntervalSince1970 * 1000)
+
+        return stripFileExtension((path as NSString).lastPathComponent)+"-\(timestamp)"
     }
     
     static func getPathUrl(_ path: String)->URL {

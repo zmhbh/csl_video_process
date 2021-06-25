@@ -28,26 +28,27 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
             getByteThumbnail(path, quality, position, result)
         case "getFileThumbnail":
             let path = args!["path"] as! String
+            let sessionId = args!["sessionId"] as! Int
             let quality = args!["quality"] as! NSNumber
             let position = args!["position"] as! NSNumber
-            getFileThumbnail(path, quality, position, result)
+            getFileThumbnail(path, sessionId, quality, position, result)
         case "getMediaInfo":
             let path = args!["path"] as! String
             getMediaInfo(path, result)
         case "compressVideo":
             let path = args!["path"] as! String
-            let quality = args!["quality"] as! NSNumber
-            let deleteOrigin = args!["deleteOrigin"] as! Bool
-            let startTime = args!["startTime"] as? Double
-            let duration = args!["duration"] as? Double
+            let sessionId = args!["sessionId"] as! Int
+            let startTimeMs = args!["startTimeMs"] as? Double
+            let endTimeMs = args!["endTimeMs"] as? Double
             let includeAudio = args!["includeAudio"] as? Bool
-            let frameRate = args!["frameRate"] as? Int
-            compressVideoV2(path, quality, deleteOrigin, startTime, duration, includeAudio,
-                          frameRate, result)
+            let rotation = args!["rotation"] as? Int
+            compressVideoV2(path, sessionId, startTimeMs, endTimeMs, includeAudio,
+                            rotation, result)
         case "cancelCompression":
             cancelCompression(result)
-        case "deleteAllCache":
-            Utility.deleteFile(Utility.basePath(), clear: true)
+        case "deleteSessionCache":
+            let sessionId = args!["sessionId"] as! Int
+            Utility.deleteFile(Utility.basePath(sessionId), clear: true)
             result(true)
         case "setLogLevel":
             result(true)
@@ -80,10 +81,10 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         }
     }
     
-    private func getFileThumbnail(_ path: String,_ quality: NSNumber,_ position: NSNumber,_ result: FlutterResult) {
+    private func getFileThumbnail(_ path: String,_ sessionId: Int,_ quality: NSNumber,_ position: NSNumber,_ result: FlutterResult) {
         let fileName = Utility.getFileName(path)
-        let url = Utility.getPathUrl("\(Utility.basePath())/\(fileName).jpg")
-        Utility.deleteFile(path)
+        let url = Utility.getPathUrl("\(Utility.basePath(sessionId))/\(fileName).jpg")
+        _ = try? FileManager.default.removeItem(at: url)
         if let bitmap = getBitMap(path,quality,position,result) {
             guard (try? bitmap.write(to: url)) != nil else {
                 return result(FlutterError(code: channelName,message: "getFileThumbnail error",details: "getFileThumbnail error"))
@@ -176,7 +177,7 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         let sourceVideoTrack = avController.getTrack(sourceVideoAsset)
         
         let compressionUrl =
-            Utility.getPathUrl("\(Utility.basePath())/\(Utility.getFileName(path)).\(sourceVideoType)")
+            Utility.getPathUrl("\(Utility.basePath(1234))/\(Utility.getFileName(path)).\(sourceVideoType)")
         
         let timescale = sourceVideoAsset.duration.timescale
         let minStartTime = Double(startTime ?? 0)
@@ -245,13 +246,57 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         })
     }
     
-    private func compressVideoV2(_ path: String,_ quality: NSNumber,_ deleteOrigin: Bool,_ startTime: Double?,
-                               _ duration: Double?,_ includeAudio: Bool?,_ frameRate: Int?,
+    private func trimVideo(_ path: String,_ sessionId: Int,_ startTimeMs: Double?, _ endTimeMs: Double?,_ rotation: Int?,
+                           _ result: @escaping FlutterResult) {
+        
+        let sourceVideoUrl = Utility.getPathUrl(path)
+        let asset = AVAsset.init(url: sourceVideoUrl)
+        let sourceVideoType = "mp4"
+        let trimmingUrl =
+            Utility.getPathUrl("\(Utility.basePath(sessionId))/\(Utility.getFileName(path)).\(sourceVideoType)")
+        _ = try? FileManager.default.removeItem(at: trimmingUrl)
+        
+        let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough)!
+        
+        exporter.outputURL = trimmingUrl
+        exporter.outputFileType = AVFileType.mp4
+        exporter.shouldOptimizeForNetworkUse = true
+        
+        if (startTimeMs != nil && endTimeMs != nil) {
+            let timescale = asset.duration.timescale
+            let cmStartTime = CMTimeMakeWithSeconds(Float64(startTimeMs!*0.001), preferredTimescale: timescale)
+            let cmEndTime = CMTimeMakeWithSeconds(Float64(endTimeMs!*0.001), preferredTimescale: timescale)
+            exporter.timeRange = CMTimeRangeFromTimeToTime(start: cmStartTime, end: cmEndTime)
+        }
+        
+        let timer = Timer.scheduledTimer(timeInterval: 0.1, target: self, selector: #selector(self.updateProgress),
+                                         userInfo: exporter, repeats: true)
+        
+        exporter.exportAsynchronously(completionHandler: {
+            if(self.stopCommand) {
+                timer.invalidate()
+                self.stopCommand = false
+                var json = self.getMediaInfoJson(path)
+                json["isCancel"] = true
+                let jsonString = Utility.keyValueToJson(json)
+                return result(jsonString)
+            }
+            var json = self.getMediaInfoJson(trimmingUrl.absoluteString)
+            json["isCancel"] = false
+            let jsonString = Utility.keyValueToJson(json)
+            result(jsonString)
+        })
+
+    }
+    
+    private func compressVideoV2(_ path: String,_ sessionId: Int,_ startTimeMs: Double?, _ endTimeMs: Double?,
+                               _ includeAudio: Bool?,_ rotation: Int?,
                                _ result: @escaping FlutterResult) {
         //video file to make the asset
         var assetWriter:AVAssetWriter?
         var assetReader:AVAssetReader?
-        let bitrate:NSNumber = NSNumber(value:1024 * 1024 * 2.0)
+        let bitrateUpperLimit:NSNumber = NSNumber(value:1024 * 1024 * 3.0)
+        let bitrateTarget = NSNumber(value:1024 * 1024 * 2.0)
         
         var audioFinished = false
         var videoFinished = false
@@ -264,10 +309,20 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         
         let asset = AVAsset(url: sourceVideoUrl)
         
-        let timescale = asset.duration.timescale
-        let cmStartTime = CMTimeMakeWithSeconds(5, preferredTimescale: timescale)
-        let cmEndTime = CMTimeMakeWithSeconds(15, preferredTimescale: timescale)
-
+        
+        let videoTrack = asset.tracks(withMediaType: AVMediaType.video).first!
+        let audioTrack = asset.tracks(withMediaType: AVMediaType.audio).first!
+        
+        let frameRate = videoTrack.nominalFrameRate
+        let currentBitrate = videoTrack.estimatedDataRate
+        print("frameRate: ",frameRate)
+        print("currentBitrate: ",currentBitrate)
+        
+        if(currentBitrate <= bitrateUpperLimit.floatValue) {
+            print("trim only and covert it to mp4 only.")
+            trimVideo(path, sessionId, startTimeMs, endTimeMs, rotation, result)
+            return
+        }
 
         //create asset reader
         do{
@@ -280,15 +335,18 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
                fatalError("Could not initalize asset reader probably failed its try catch")
            }
         
-        //reader.timeRange = CMTimeRangeFromTimeToTime(start: cmStartTime, end: cmEndTime)
-        
-        let videoTrack = asset.tracks(withMediaType: AVMediaType.video).first!
-        let audioTrack = asset.tracks(withMediaType: AVMediaType.audio).first!
+        if (startTimeMs != nil && endTimeMs != nil) {
+            let timescale = asset.duration.timescale
+            let cmStartTime = CMTimeMakeWithSeconds(Float64(startTimeMs!*0.001), preferredTimescale: timescale)
+            let cmEndTime = CMTimeMakeWithSeconds(Float64(endTimeMs!*0.001), preferredTimescale: timescale)
+            reader.timeRange = CMTimeRangeFromTimeToTime(start: cmStartTime, end: cmEndTime)
+        }
+
         
         let videoReaderSettings: [String:Any] =  [kCVPixelBufferPixelFormatTypeKey as String:kCVPixelFormatType_32ARGB ]
 
         let compressionUrl =
-            Utility.getPathUrl("\(Utility.basePath())/\(Utility.getFileName(path)).\(sourceVideoType)")
+            Utility.getPathUrl("\(Utility.basePath(sessionId))/\(Utility.getFileName(path)).\(sourceVideoType)")
         
         print("compressionUrl: ", compressionUrl)
         _ = try? FileManager.default.removeItem(at: compressionUrl)
@@ -298,7 +356,7 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
                 
         // Video Output Configuration
         let videoCompressionProps: Dictionary<String, Any> = [
-            AVVideoAverageBitRateKey : bitrate,
+            AVVideoAverageBitRateKey : bitrateTarget,
             AVVideoMaxKeyFrameIntervalKey : 15,
             AVVideoProfileLevelKey : AVVideoProfileLevelH264High41
         ]
@@ -307,29 +365,21 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         //resize
         // Rect to fit that size within. In this case you don't care about fitting
         // inside a rect, so pass (0, 0) for the origin.
-        
-        let frameRate = videoTrack.nominalFrameRate
-        let bitRate = videoTrack.estimatedDataRate
-        
-        print("videoTrack.naturalSize: ",videoTrack.naturalSize)
-        print("frameRate: ",frameRate)
-        print("bitRate: ",bitRate)
-        
-        let transform = videoTrack.preferredTransform
-        func radiansToDegrees(_ radians: Float) -> CGFloat {
-                    return CGFloat(radians * 180.0 / Float.pi)
-                }
-        let videoAngleInDegree = Int(radiansToDegrees(atan2f(Float(transform.b), Float(transform.a))))
-        print("videoAngleInDegree: ", videoAngleInDegree)
+        let videoRotation = avController.getVideoRotation(videoTrack)
+        print("videoRotation: ", videoRotation)
         
         var constraint = CGRect(x: 0, y: 0, width: 720, height: 1080)
-        if (abs(videoAngleInDegree) == 90){
+        if (abs(videoRotation) == 90){
             constraint = CGRect(x: 0, y: 0, width: 1080, height: 720)
         }
+         
+        print("videoTrack.naturalSize: ",videoTrack.naturalSize)
+
         let compressedSize = AVMakeRect(aspectRatio: videoTrack.naturalSize, insideRect: constraint).size
         
         let videoSettings:[String:Any] = [
             AVVideoCompressionPropertiesKey: videoCompressionProps,
+           // AVVideoExpectedSourceFrameRateKey: 30,
             AVVideoCodecKey: AVVideoCodecH264,
             AVVideoHeightKey: compressedSize.height,
             AVVideoWidthKey: compressedSize.width
@@ -374,7 +424,8 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
                 
         let audioInput = AVAssetWriterInput(mediaType: AVMediaType.audio, outputSettings: audioOutputSettings)
         let videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: videoSettings)
-        videoInput.transform = videoTrack.preferredTransform
+        
+        videoInput.transform = videoTrack.preferredTransform.rotated(by: CGFloat.pi * CGFloat(Float(rotation!)/180.0))
         //we need to add samples to the video input
         
         let videoInputQueue = DispatchQueue(label: "videoQueue")

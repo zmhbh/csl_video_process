@@ -60,11 +60,10 @@ class _MyHomePageState extends State<MyHomePage> {
     await VideoCompress.setLogLevel(0);
     final MediaInfo? info = await VideoCompress.compressVideo(
       file.path,
-      quality: VideoQuality.HighestQuality,
-      // startTime: 0,
-      // duration: 10,
-      deleteOrigin: false,
-      includeAudio: true,
+      sessionId: 123,
+      startTimeMs: 0.1234,
+      endTimeMs: 14000.331,
+      rotation: 90,
     );
     print(info!.path);
     if (info != null) {
@@ -97,7 +96,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   size: 55,
                 ),
                 onTap: () {
-                  VideoCompress.cancelCompression();
+                  VideoCompress.deleteSessionCache(sessionId: 123);
                 }),
             ElevatedButton(
               onPressed: () {

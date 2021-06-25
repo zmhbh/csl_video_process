@@ -41,6 +41,18 @@ class AvController: NSObject {
             return 270
         }
     }
+    ///     case 0: return .right
+    ///     case 90: return .up
+    ///     case 180: return .left
+    ///     case -90: return .down
+    public func getVideoRotation(_ videoTrack: AVAssetTrack) -> Int {
+        let transform = videoTrack.preferredTransform
+        func radiansToDegrees(_ radians: Float) -> CGFloat {
+                    return CGFloat(radians * 180.0 / Float.pi)
+                }
+        let videoAngleInDegree = Int(radiansToDegrees(atan2f(Float(transform.b), Float(transform.a))))
+        return videoAngleInDegree
+    }
     
     public func getMetaDataByTag(_ asset:AVAsset,key:String)->String {
         for item in asset.commonMetadata {

@@ -19,16 +19,19 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
       var file;
 
       if (Platform.isMacOS) {
-        final typeGroup = XTypeGroup(label: 'videos', extensions: ['mov', 'mp4']);
+        final typeGroup =
+            XTypeGroup(label: 'videos', extensions: ['mov', 'mp4']);
         file = await openFile(acceptedTypeGroups: [typeGroup]);
       } else {
         final picker = ImagePicker();
-        PickedFile? pickedFile = await picker.getVideo(source: ImageSource.gallery);
+        PickedFile? pickedFile =
+            await picker.getVideo(source: ImageSource.gallery);
         file = File(pickedFile!.path);
       }
 
       if (file != null) {
-        _thumbnailFile = await VideoCompress.getFileThumbnail(file.path);
+        _thumbnailFile =
+            await VideoCompress.getFileThumbnail(file.path, sessionId: 123);
         setState(() {
           print(_thumbnailFile);
         });
@@ -42,7 +45,10 @@ class _VideoThumbnailState extends State<VideoThumbnail> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Container(child: ElevatedButton(onPressed: _getVideoThumbnail, child: Text('Get File Thumbnail'))),
+            Container(
+                child: ElevatedButton(
+                    onPressed: _getVideoThumbnail,
+                    child: Text('Get File Thumbnail'))),
             _buildThumbnail(),
           ],
         ),
