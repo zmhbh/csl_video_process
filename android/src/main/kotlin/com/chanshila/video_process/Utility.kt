@@ -127,8 +127,9 @@ class Utility(private val channelName: String) {
         return fileName
     }
 
-    fun deleteAllCache(context: Context, result: MethodChannel.Result) {
-        val dir = context.getExternalFilesDir("csl_video_process")
-        result.success(dir?.deleteRecursively())
+    fun deleteSessionCache(context: Context, sessionId: Long, result: MethodChannel.Result) : Boolean {
+        val dir = context.getExternalFilesDir("csl_video_process/$sessionId")
+        val res = dir?.deleteRecursively() == true
+        return res
     }
 }

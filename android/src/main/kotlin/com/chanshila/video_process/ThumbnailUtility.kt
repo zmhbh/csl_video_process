@@ -21,17 +21,18 @@ class ThumbnailUtility(channelName: String) {
         result.success(byteArray.toList().toByteArray())
     }
 
-    fun getFileThumbnail(context: Context, path: String, quality: Int, position: Long,
+    fun getFileThumbnail(context: Context, path: String, sessionId: Long, quality: Int, position: Long,
                              result: MethodChannel.Result) {
         var timeUs = position * 1000
         val bmp = utility.getBitmap(path, timeUs, result)
 
-        val dir = context.getExternalFilesDir("csl_video_process")
+        val dir = context.getExternalFilesDir("csl_video_process/$sessionId")
 
         if (dir != null && !dir.exists()) dir.mkdirs()
 
+        val out = System.currentTimeMillis()
         val file = File(dir, path.substring(path.lastIndexOf('/'),
-                path.lastIndexOf('.')) + ".jpg")
+                path.lastIndexOf('.')) + "-" + out + ".jpg")
         utility.deleteFile(file)
 
         val stream = ByteArrayOutputStream()

@@ -35,6 +35,7 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
     private val LOG = Logger(TAG)
     private var transcodeFuture:Future<Void>? = null
     var channelName = "csl_video_process"
+    private val utility = Utility(channelName)
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         val context = _context;
@@ -54,17 +55,19 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
             }
             "getFileThumbnail" -> {
                 val path = call.argument<String>("path")
+                val sessionId = call.argument<Long>("sessionId")
                 val quality = call.argument<Int>("quality")!!
                 val position = call.argument<Int>("position")!! // to long
-                ThumbnailUtility("video_compress").getFileThumbnail(context, path!!, quality,
+                ThumbnailUtility("video_compress").getFileThumbnail(context, path!!, sessionId!!, quality,
                         position.toLong(), result)
             }
             "getMediaInfo" -> {
                 val path = call.argument<String>("path")
                 result.success(Utility(channelName).getMediaInfoJson(context, path!!).toString())
             }
-            "deleteAllCache" -> {
-                result.success(Utility(channelName).deleteAllCache(context, result));
+            "deleteSessionCache" -> {
+                val sessionId = call.argument<Long>("sessionId")!!
+                result.success(Utility(channelName).deleteSessionCache(context, sessionId, result));
             }
             "setLogLevel" -> {
                 val logLevel = call.argument<Int>("logLevel")!!
@@ -77,42 +80,31 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
             }
             "compressVideo" -> {
                 val path = call.argument<String>("path")!!
-                val quality = call.argument<Int>("quality")!!
-                val deleteOrigin = call.argument<Boolean>("deleteOrigin")!!
-                val startTime = call.argument<Int>("startTime")
-                val duration = call.argument<Int>("duration")
+                val sessionId = call.argument<Long>("sessionId")!!
+                val startTimeMs = call.argument<Double>("startTimeMs")
+                val endTimeMs = call.argument<Double>("endTimeMs")
                 val includeAudio = call.argument<Boolean>("includeAudio") ?: true
-                val frameRate = if (call.argument<Int>("frameRate")==null) 30 else call.argument<Int>("frameRate")
+                val rotation = call.argument<Int>("rotation") ?: 0
+                val tempDir: String = context.getExternalFilesDir("csl_video_process/$sessionId")!!.absolutePath
+                val out = System.currentTimeMillis()
+                val outputFileName = path.substring(path.lastIndexOf('/'),
+                        path.lastIndexOf('.')) +"-" + out + ".mp4"
+                val destPath: String = tempDir + outputFileName
 
-                val tempDir: String = context.getExternalFilesDir("video_compress")!!.absolutePath
-                val out = SimpleDateFormat("yyyy-MM-dd hh-mm-ss").format(Date())
-                val destPath: String = tempDir + File.separator + "VID_" + out + ".mp4"
+                val file = File(tempDir, outputFileName)
+                utility.deleteFile(file)
 
-                var videoTrackStrategy: TrackStrategy = DefaultVideoStrategy.atMost(340).build();
+
+                var videoTrackStrategy: TrackStrategy
                 val audioTrackStrategy: TrackStrategy
 
-                when (quality) {
 
-                    0 -> {
-                      videoTrackStrategy = DefaultVideoStrategy.atMost(720).build()
-                    }
 
-                    1 -> {
-                        videoTrackStrategy = DefaultVideoStrategy.atMost(360).build()
-                    }
-                    2 -> {
-                        videoTrackStrategy = DefaultVideoStrategy.atMost(640).build()
-                    }
-                    3 -> {
-
-                        assert(value = frameRate != null)
-                        videoTrackStrategy = DefaultVideoStrategy.Builder()
-                                .keyFrameInterval(15f)
-                                .bitRate(1024 * 1024 * 2.5.toLong())
-                                .frameRate(frameRate!!) // will be capped to the input frameRate
-                                .build()
-                    }
-                }
+                videoTrackStrategy = DefaultVideoStrategy.atMost(720)
+                        //.keyFrameInterval(15f)
+                        .bitRate(1024 * 1024 * 2.0.toLong())
+                        .frameRate(30) // will be capped to the input frameRate
+                        .build()
 
                 audioTrackStrategy = if (includeAudio) {
                     val sampleRate = DefaultAudioStrategy.SAMPLE_RATE_AS_INPUT
@@ -126,15 +118,16 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
                     RemoveTrackStrategy()
                 }
 
-                val dataSource = if (startTime != null || duration != null){
+                val dataSource = if (startTimeMs != null && endTimeMs != null){
                     val source = UriDataSource(context, Uri.parse(path))
-                    TrimDataSource(source, (1000 * 1000 * (startTime ?: 0)).toLong(), (1000 * 1000 * (duration ?: 0)).toLong())
+                    TrimDataSource(source, (startTimeMs * 1000).toLong(), (endTimeMs * 1000).toLong())
                 }else{
                     UriDataSource(context, Uri.parse(path))
                 }
 
 
                 transcodeFuture = Transcoder.into(destPath!!)
+                        .setVideoRotation(rotation)
                         .addDataSource(dataSource)
                         .setAudioTrackStrategy(audioTrackStrategy)
                         .setVideoTrackStrategy(videoTrackStrategy)
@@ -147,9 +140,6 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
                                 val json = Utility(channelName).getMediaInfoJson(context, destPath)
                                 json.put("isCancel", false)
                                 result.success(json.toString())
-                                if (deleteOrigin) {
-                                    File(path).delete()
-                                }
                             }
 
                             override fun onTranscodeCanceled() {

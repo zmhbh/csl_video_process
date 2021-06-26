@@ -273,8 +273,9 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
 
         try! audioTrack?.insertTimeRange(CMTimeRangeMake(start: CMTime.zero, duration: asset.duration), of: asset.tracks(withMediaType: .audio)[0], at: CMTime.zero)
 
+      //  let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPreset1280x720)!
         
-        let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough)!
+        let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPreset1280x720)!
         
         exporter.outputURL = trimmingUrl
         exporter.outputFileType = AVFileType.mp4
@@ -395,14 +396,24 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         let videoRotation = avController.getVideoRotation(videoTrack)
         print("videoRotation: ", videoRotation)
         
-        var constraint = CGRect(x: 0, y: 0, width: 720, height: 1280)
-        if (abs(videoRotation) == 90){
-            constraint = CGRect(x: 0, y: 0, width: 1280, height: 720)
+        var constraint720p = CGRect(x: 0, y: 0, width: 720, height: 1280)
+        if (videoTrack.naturalSize.width > videoTrack.naturalSize.height){
+            constraint720p = CGRect(x: 0, y: 0, width: 1280, height: 720)
         }
          
         print("videoTrack.naturalSize: ",videoTrack.naturalSize)
 
-        let compressedSize = AVMakeRect(aspectRatio: videoTrack.naturalSize, insideRect: constraint).size
+        var compressedSize = AVMakeRect(aspectRatio: videoTrack.naturalSize, insideRect: constraint720p).size
+        
+        // process the compressedSize
+        //https://stackoverflow.com/questions/22883525/avassetexportsession-giving-me-a-green-border-on-right-and-bottom-of-output-vide
+        //
+        print("compressedSize before processing: ", compressedSize)
+        
+        compressedSize.height = floor(compressedSize.height / 16) * 16
+        compressedSize.width = floor(compressedSize.width / 16) * 16
+
+        print("final compressedSize: ",compressedSize)
         
         let videoSettings:[String:Any] = [
             AVVideoCompressionPropertiesKey: videoCompressionProps,
