@@ -43,7 +43,7 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
             let includeAudio = args!["includeAudio"] as? Bool
             let rotation = args!["rotation"] as? Int
             compressVideoV2(path, sessionId, startTimeMs, endTimeMs, includeAudio,
-                            rotation, result)
+           rotation, result)
         case "cancelCompression":
             cancelCompression(result)
         case "deleteSessionCache":
@@ -256,7 +256,25 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
             Utility.getPathUrl("\(Utility.basePath(sessionId))/\(Utility.getFileName(path)).\(sourceVideoType)")
         _ = try? FileManager.default.removeItem(at: trimmingUrl)
         
-        let exporter = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetPassthrough)!
+        var rotationValue = 0;
+        if (rotation != nil) {
+            rotationValue = rotation!
+        }
+        
+        let transformation = asset.preferredTransform.rotated(by: CGFloat.pi * CGFloat(Float(rotationValue)/180.0))
+        
+        let composition = AVMutableComposition()
+
+        let videoTrack = composition.addMutableTrack(withMediaType: AVMediaType.video, preferredTrackID: kCMPersistentTrackID_Invalid)
+        let audioTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
+
+        try? videoTrack!.insertTimeRange(CMTimeRangeMake(start: CMTime.zero, duration: asset.duration), of: asset.tracks(withMediaType: .video)[0], at: CMTime.zero)
+        videoTrack!.preferredTransform = transformation
+
+        try! audioTrack?.insertTimeRange(CMTimeRangeMake(start: CMTime.zero, duration: asset.duration), of: asset.tracks(withMediaType: .audio)[0], at: CMTime.zero)
+
+        
+        let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough)!
         
         exporter.outputURL = trimmingUrl
         exporter.outputFileType = AVFileType.mp4
@@ -298,6 +316,12 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         let bitrateUpperLimit:NSNumber = NSNumber(value:1024 * 1024 * 3.0)
         let bitrateTarget = NSNumber(value:1024 * 1024 * 2.0)
         
+        
+        var rotationValue = 0;
+        if (rotation != nil) {
+            rotationValue = rotation!
+        }
+                
         var audioFinished = false
         var videoFinished = false
         
@@ -309,7 +333,8 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         
         let asset = AVAsset(url: sourceVideoUrl)
         
-        
+        var duration = asset.duration
+
         let videoTrack = asset.tracks(withMediaType: AVMediaType.video).first!
         let audioTrack = asset.tracks(withMediaType: AVMediaType.audio).first!
         
@@ -335,11 +360,13 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
                fatalError("Could not initalize asset reader probably failed its try catch")
            }
         
+        let timescale = asset.duration.timescale
+        var cmStartTime = CMTime.zero
         if (startTimeMs != nil && endTimeMs != nil) {
-            let timescale = asset.duration.timescale
-            let cmStartTime = CMTimeMakeWithSeconds(Float64(startTimeMs!*0.001), preferredTimescale: timescale)
+            cmStartTime = CMTimeMakeWithSeconds(Float64(startTimeMs!*0.001), preferredTimescale: timescale)
             let cmEndTime = CMTimeMakeWithSeconds(Float64(endTimeMs!*0.001), preferredTimescale: timescale)
             reader.timeRange = CMTimeRangeFromTimeToTime(start: cmStartTime, end: cmEndTime)
+            duration = reader.timeRange.duration
         }
 
         
@@ -357,8 +384,8 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         // Video Output Configuration
         let videoCompressionProps: Dictionary<String, Any> = [
             AVVideoAverageBitRateKey : bitrateTarget,
-            AVVideoMaxKeyFrameIntervalKey : 15,
-            AVVideoProfileLevelKey : AVVideoProfileLevelH264High41
+           // AVVideoMaxKeyFrameIntervalKey : 15,
+            AVVideoProfileLevelKey : AVVideoProfileLevelH264HighAutoLevel
         ]
         
         
@@ -368,9 +395,9 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         let videoRotation = avController.getVideoRotation(videoTrack)
         print("videoRotation: ", videoRotation)
         
-        var constraint = CGRect(x: 0, y: 0, width: 720, height: 1080)
+        var constraint = CGRect(x: 0, y: 0, width: 720, height: 1280)
         if (abs(videoRotation) == 90){
-            constraint = CGRect(x: 0, y: 0, width: 1080, height: 720)
+            constraint = CGRect(x: 0, y: 0, width: 1280, height: 720)
         }
          
         print("videoTrack.naturalSize: ",videoTrack.naturalSize)
@@ -425,7 +452,7 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         let audioInput = AVAssetWriterInput(mediaType: AVMediaType.audio, outputSettings: audioOutputSettings)
         let videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: videoSettings)
         
-        videoInput.transform = videoTrack.preferredTransform.rotated(by: CGFloat.pi * CGFloat(Float(rotation!)/180.0))
+        videoInput.transform = CGAffineTransform.identity.rotated(by: CGFloat.pi * CGFloat(Float(videoRotation + rotationValue)/180.0))
         //we need to add samples to the video input
         
         let videoInputQueue = DispatchQueue(label: "videoQueue")
@@ -447,7 +474,7 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         
         writer.startWriting()
         reader.startReading()
-        writer.startSession(atSourceTime: CMTime.zero)
+        writer.startSession(atSourceTime: cmStartTime)
         
         let closeWriter:()->Void = {
                     if (audioFinished && videoFinished){
@@ -468,8 +495,7 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
          
                     }
                 }
-         
-        let duration = asset.duration
+        
         let durationTime = CMTimeGetSeconds(duration)
                 
                 audioInput.requestMediaDataWhenReady(on: audioInputQueue) {
@@ -498,7 +524,9 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
                         if (sample != nil){
                             videoInput.append(sample!)
                             let timeStamp = CMSampleBufferGetPresentationTimeStamp(sample!)
-                            let timeSecond = CMTimeGetSeconds(timeStamp)
+                            var timeSecond = CMTimeGetSeconds(timeStamp)
+                            timeSecond = timeSecond - CMTimeGetSeconds(cmStartTime)
+                            
                             let per = timeSecond / durationTime
                             print("video progress --- \(per)")
                         }else{

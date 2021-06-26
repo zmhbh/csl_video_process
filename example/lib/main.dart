@@ -61,7 +61,7 @@ class _MyHomePageState extends State<MyHomePage> {
     final MediaInfo? info = await VideoCompress.compressVideo(
       file.path,
       sessionId: 123,
-      startTimeMs: 0.1234,
+      startTimeMs: 10000.1234,
       endTimeMs: 14000.331,
       rotation: 90,
     );
