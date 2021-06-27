@@ -393,9 +393,6 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         //resize
         // Rect to fit that size within. In this case you don't care about fitting
         // inside a rect, so pass (0, 0) for the origin.
-        let videoRotation = avController.getVideoRotation(videoTrack)
-        print("videoRotation: ", videoRotation)
-        
         var constraint720p = CGRect(x: 0, y: 0, width: 720, height: 1280)
         if (videoTrack.naturalSize.width > videoTrack.naturalSize.height){
             constraint720p = CGRect(x: 0, y: 0, width: 1280, height: 720)
@@ -463,7 +460,17 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         let audioInput = AVAssetWriterInput(mediaType: AVMediaType.audio, outputSettings: audioOutputSettings)
         let videoInput = AVAssetWriterInput(mediaType: AVMediaType.video, outputSettings: videoSettings)
         
-        videoInput.transform = CGAffineTransform.identity.rotated(by: CGFloat.pi * CGFloat(Float(videoRotation + rotationValue)/180.0))
+        let preferredTransform = videoTrack.preferredTransform
+        print("preferredTransform: ", preferredTransform)
+        
+        let currOrientation = avController.getCurrentOrientation(videoTrack)
+        print("currOrientation: ", currOrientation.rawValue)
+        
+        let targetOrientation = avController.getTargetOrientation(currOrientation, rotationValue)
+        print("targetOrientation: ", targetOrientation.rawValue)
+
+        videoInput.transform = avController.getTransform(targetOrientation, compressedSize)
+        print("videoInput.transform: ",videoInput.transform)
         //we need to add samples to the video input
         
         let videoInputQueue = DispatchQueue(label: "videoQueue")

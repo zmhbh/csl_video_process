@@ -3,6 +3,9 @@ import AVFoundation
 import MobileCoreServices
 
 class AvController: NSObject {
+    /// landscape right means home button to the right
+    final let orientations = [UIInterfaceOrientation.landscapeRight, UIInterfaceOrientation.portrait, UIInterfaceOrientation.landscapeLeft, UIInterfaceOrientation.portraitUpsideDown];
+    
     public func getVideoAsset(_ url:URL)->AVURLAsset {
         return AVURLAsset(url: url)
     }
@@ -52,6 +55,51 @@ class AvController: NSObject {
                 }
         let videoAngleInDegree = Int(radiansToDegrees(atan2f(Float(transform.b), Float(transform.a))))
         return videoAngleInDegree
+    }
+    
+    public func getCurrentOrientation(_ videoTrack: AVAssetTrack) -> UIInterfaceOrientation {
+        var orientation = UIInterfaceOrientation.portrait
+        let t = videoTrack.preferredTransform
+        // Portrait
+        if(t.a == 0 && t.b == 1.0 && t.c == -1.0 && t.d == 0) {
+            orientation = UIInterfaceOrientation.portrait
+        }
+        // PortraitUpsideDown
+        if(t.a == 0 && t.b == -1.0 && t.c == 1.0 && t.d == 0) {
+            orientation = UIInterfaceOrientation.portraitUpsideDown
+        }
+        // LandscapeRight
+        if(t.a == 1.0 && t.b == 0 && t.c == 0 && t.d == 1.0) {
+            orientation = UIInterfaceOrientation.landscapeRight;
+        }
+        // LandscapeLeft
+        if(t.a == -1.0 && t.b == 0 && t.c == 0 && t.d == -1.0) {
+            orientation = UIInterfaceOrientation.landscapeLeft;
+        }
+        return orientation
+    }
+    
+    ///[rotation] is clockwise
+    public func getTargetOrientation(_ currentOrientation: UIInterfaceOrientation, _ rotation: Int) -> UIInterfaceOrientation{
+        let currentIdx = orientations.firstIndex(of: currentOrientation)
+        var targetIdx = currentIdx! + Int(rotation / 90)
+        targetIdx = targetIdx % 4
+        return orientations[targetIdx]
+    }
+    
+    public func getTransform(_ orientation: UIInterfaceOrientation, _ size: CGSize) -> CGAffineTransform{
+        switch (orientation) {
+        case UIInterfaceOrientation.landscapeLeft:
+            return CGAffineTransform(a: -1, b: 0,c: 0, d: -1, tx: size.width, ty: size.height)
+        case UIInterfaceOrientation.landscapeRight:
+            return CGAffineTransform(a: 1, b: 0,c: 0, d: 1, tx: 0, ty: 0)
+        case UIInterfaceOrientation.portrait:
+            return CGAffineTransform(a: 0, b: 1,c: -1, d: 0, tx: size.height, ty: 0)
+        case UIInterfaceOrientation.portraitUpsideDown:
+            return CGAffineTransform(a: 0, b: -1,c: 1, d: 0, tx: 0, ty: size.width)
+        default:
+            return CGAffineTransform(a: 0, b: 1,c: -1, d: 0, tx: size.height, ty: 0)
+        }
     }
     
     public func getMetaDataByTag(_ asset:AVAsset,key:String)->String {
