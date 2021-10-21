@@ -121,7 +121,12 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
                 val dataSource = if (startTimeMs != null && endTimeMs != null){
                     val source = UriDataSource(context, Uri.parse(path))
                     // for Transcoder, how trimming works: x second at the beginning, and y seconds at the end:
-                    TrimDataSource(source, (startTimeMs * 1000).toLong(), source.getDurationUs() - (endTimeMs * 1000).toLong())
+                    val x = (startTimeMs * 1000).toLong()
+                    var y = source.getDurationUs() - (endTimeMs * 1000).toLong()
+                    if(y < 0) {
+                        y = 0
+                    }
+                    TrimDataSource(source, x, y)
                 }else{
                     UriDataSource(context, Uri.parse(path))
                 }
