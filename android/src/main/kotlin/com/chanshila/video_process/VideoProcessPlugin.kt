@@ -102,7 +102,7 @@ class VideoProcessPlugin : MethodCallHandler, FlutterPlugin {
 
                 videoTrackStrategy = DefaultVideoStrategy.atMost(720)
                         //.keyFrameInterval(15f)
-                        .bitRate(1024 * 1024 * 2.0.toLong())
+                        .bitRate(1024 * 1024 * 3.0.toLong()) //from 2.0
                         .frameRate(30) // will be capped to the input frameRate
                         .build()
 

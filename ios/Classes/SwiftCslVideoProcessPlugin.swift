@@ -314,8 +314,8 @@ public class SwiftCslVideoProcessPlugin: NSObject, FlutterPlugin {
         //video file to make the asset
         var assetWriter:AVAssetWriter?
         var assetReader:AVAssetReader?
-        let bitrateUpperLimit:NSNumber = NSNumber(value:1024 * 1024 * 3.0)
-        let bitrateTarget = NSNumber(value:1024 * 1024 * 2.0)
+        let bitrateUpperLimit:NSNumber = NSNumber(value:1024 * 1024 * 4.0) //3.0
+        let bitrateTarget = NSNumber(value:1024 * 1024 * 3.0)   //2.0
         
         
         var rotationValue = 0;
